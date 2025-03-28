@@ -1,11 +1,8 @@
-# Запуск с правами администратора (если не запущен)
-$currProc = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
-if (-Not $currProc.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Start-Process PowerShell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-    exit
-}
+# -----------------------------------------
+# ФУНКЦІЇ
+# -----------------------------------------
 
-# Функция выбора папки через Проводник
+# Функція вибору папки через Проводник
 function Select-Folder {
     param ([string]$message)
     Add-Type -AssemblyName System.Windows.Forms
@@ -19,12 +16,7 @@ function Select-Folder {
     }
 }
 
-# Переменные для путей и автора
-$sourceDrive = "Not selected"
-$destinationDrive = "Not selected"
-$authorName = "Not set"
-
-# Функция для отображения меню
+# Функція відображення меню
 function Show-Menu {
     Clear-Host
     Write-Host "-----------------------------------------"
@@ -39,73 +31,99 @@ function Show-Menu {
     Write-Host "Press a number key (1-5) to select an option..."
 }
 
-# Флаг для выхода из меню
-$exitMenu = $false
+# Функція отримання автора файлу
+function Get-FileAuthor($filePath) {
+    $folder = $shell.Namespace((Get-Item $filePath).DirectoryName)
+    $item = $folder.ParseName((Get-Item $filePath).Name)
+    return $folder.GetDetailsOf($item, 20)  # 20 — індекс властивості "Автор"
+}
 
-# Цикл меню с обработкой нажатий клавиш
+# Функція виведення повідомлення про початок копіювання
+function Show-StartMessage {
+    Write-Host "-----------------------------------------"
+    Write-Host "Starting file copy process..."
+    Write-Host "-----------------------------------------"
+    Start-Sleep 1
+}
+
+# Функція виведення повідомлення про завершення копіювання
+function Show-CompletionMessage {
+    Write-Host "-----------------------------------------"
+    Write-Host "PROCESS COMPLETED"
+    Write-Host "Files copied to: $destinationDrive"
+    Write-Host "Total copied: $($copiedFiles.Count) files"
+    Write-Host "-----------------------------------------"
+    Write-Host "Thank you for using our tool!"
+    Write-Host "We appreciate your trust."
+    Write-Host "Have a great day! <3"
+    Write-Host "-----------------------------------------"
+    pause
+}
+
+# Функція виведення прощального повідомлення
+function Show-ExitMessage {
+    Write-Host "-----------------------------------------"
+    Write-Host "Thank you for using our tool!"
+    Write-Host "We appreciate your trust."
+    Write-Host "Have a great day! <3"
+    Write-Host "-----------------------------------------"
+    Start-Sleep 5
+}
+
+# -----------------------------------------
+# ОСНОВНИЙ КОД
+# -----------------------------------------
+
+# Запуск з правами адміністратора
+$currProc = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-Not $currProc.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Start-Process PowerShell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+    exit
+}
+
+# Ініціалізація змінних
+$sourceDrive = "Not selected"
+$destinationDrive = "Not selected"
+$authorName = "Not set"
+$exitMenu = $false
+$shell = New-Object -ComObject Shell.Application
+
+# Цикл меню
 do {
     Show-Menu
     $choice = [System.Console]::ReadKey($true).KeyChar
 
     switch ($choice) {
-        "1" {
-            $selectedFolder = Select-Folder -message "Select the source folder"
-            if ($selectedFolder) { $sourceDrive = $selectedFolder }
-        }
-        "2" {
-            $selectedFolder = Select-Folder -message "Select the destination folder"
-            if ($selectedFolder) { $destinationDrive = $selectedFolder }
-        }
-        "3" {
-            Write-Host "`nEnter author name: " -NoNewline
-            $authorName = Read-Host
-        }
+        "1" { $selectedFolder = Select-Folder -message "Select the source folder"; if ($selectedFolder) { $sourceDrive = $selectedFolder } }
+        "2" { $selectedFolder = Select-Folder -message "Select the destination folder"; if ($selectedFolder) { $destinationDrive = $selectedFolder } }
+        "3" { Write-Host "\nEnter author name: " -NoNewline; $authorName = Read-Host }
         "4" {
             if ($sourceDrive -eq "Not selected" -or $destinationDrive -eq "Not selected" -or $authorName -eq "Not set") {
-                Write-Host "`nERROR: Please complete all fields before starting the process!"
+                Write-Host "\nERROR: Please complete all fields before starting the process!"
                 Start-Sleep 2
             } else {
-                $exitMenu = $true  # Завершаем меню
+                $exitMenu = $true
             }
         }
-        "5" {
-            Write-Host "Exiting..."
-            exit
-        }
-        default {
-            Write-Host "Invalid option! Try again."
-            Start-Sleep 1
-        }
+        "5" { Show-ExitMessage; exit }
+        default { Write-Host "Invalid option! Try again."; Start-Sleep 1 }
     }
 } while (-Not $exitMenu)
 
-# Создаем папку назначения, если её нет
+# Переконуємось, що папка призначення існує
 if (!(Test-Path $destinationDrive)) {
     New-Item -ItemType Directory -Path $destinationDrive | Out-Null
 }
 
-# Создаем объект Shell.Application для получения метаданных
-$shell = New-Object -ComObject Shell.Application
-
-# Получаем список всех файлов
+# Отримуємо список файлів
 $files = Get-ChildItem -Path $sourceDrive -Recurse -File
 $totalFiles = $files.Count
 $processedFiles = 0
 $copiedFiles = @()
 
-# Функция получения автора файла
-function Get-FileAuthor($filePath) {
-    $folder = $shell.Namespace((Get-Item $filePath).DirectoryName)
-    $item = $folder.ParseName((Get-Item $filePath).Name)
-    return $folder.GetDetailsOf($item, 20)  # 20 — индекс свойства "Автор"
-}
+Show-StartMessage
 
-Write-Host "`n-----------------------------------------"
-Write-Host "Starting file copy process..."
-Write-Host "-----------------------------------------"
-Start-Sleep 1
-
-# Ищем файлы с нужным автором и копируем их
+# Копіювання файлів за автором
 foreach ($file in $files) {
     $fileAuthor = Get-FileAuthor $file.FullName
     if ($fileAuthor -eq $authorName) {
@@ -114,16 +132,11 @@ foreach ($file in $files) {
         $copiedFiles += $file.FullName
         Write-Host "[COPIED] $($file.FullName)"
     }
-
-    # Обновляем прогресс
+    
+    # Оновлення прогресу
     $processedFiles++
     $percentComplete = [math]::Round(($processedFiles / $totalFiles) * 100, 2)
     Write-Progress -Activity "Copying files" -Status "$percentComplete% completed" -PercentComplete $percentComplete
 }
 
-Write-Host "-----------------------------------------"
-Write-Host "PROCESS COMPLETED"
-Write-Host "Files by author '$authorName' copied to: $destinationDrive"
-Write-Host "Total copied: $($copiedFiles.Count) files"
-Write-Host "-----------------------------------------"
-pause
+Show-CompletionMessage
