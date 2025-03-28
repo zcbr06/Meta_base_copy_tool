@@ -49,7 +49,6 @@ Successfully copied files are listed in the terminal.
 Completion
 
 Once the process is complete, the script will display a summary of copied files.
-
 Press any key to exit.
 
 NOTES:
